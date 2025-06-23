@@ -13,8 +13,15 @@ interface OpenAIResponse {
   }>;
 }
 
+interface ImageResponse {
+  data: Array<{
+    url: string;
+  }>;
+}
+
 export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const generatePrompt = async (briefing: string): Promise<string> => {
@@ -75,9 +82,50 @@ Estruture o prompt com:
     }
   };
 
+  const generateImage = async (prompt: string): Promise<string> => {
+    if (!apiKey) {
+      throw new Error('API key da OpenAI é obrigatória');
+    }
+
+    setIsGeneratingImage(true);
+    setError(null);
+
+    try {
+      const response = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'dall-e-3',
+          prompt: prompt.substring(0, 4000), // DALL-E tem limite de caracteres
+          n: 1,
+          size: '1024x1024',
+          quality: 'standard',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro da API OpenAI: ${response.status} ${response.statusText}`);
+      }
+
+      const data: ImageResponse = await response.json();
+      return data.data[0]?.url || '';
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
   return {
     generatePrompt,
+    generateImage,
     isLoading,
+    isGeneratingImage,
     error,
   };
 };
