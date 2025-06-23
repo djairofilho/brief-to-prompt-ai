@@ -1,9 +1,8 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Sparkles, Copy, Check, RefreshCw } from "lucide-react";
+import { Sparkles, Copy, Check, RefreshCw, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useOpenAI } from "@/hooks/useOpenAI";
 import ApiKeyInput from "./ApiKeyInput";
@@ -101,13 +100,14 @@ Elementos visuais a considerar:
     }
   };
 
-  const resetApiKey = () => {
+  const resetToInitialState = () => {
     setApiKey("");
-    localStorage.removeItem('openai_api_key');
+    setUseSimulation(false);
     setGeneratedPrompt("");
+    localStorage.removeItem('openai_api_key');
     toast({
-      title: "API Key removida",
-      description: "Você pode configurar uma nova chave ou usar o modo simulação.",
+      title: "Configuração resetada",
+      description: "Você pode escolher novamente como usar o gerador.",
     });
   };
 
@@ -149,15 +149,32 @@ Elementos visuais a considerar:
                   {apiKey ? "OpenAI GPT-4 Conectado" : "Modo Simulação Ativo"}
                 </span>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={resetApiKey}
-                className="text-green-700 hover:text-green-900"
-              >
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Trocar
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetToInitialState}
+                  className="text-green-700 hover:text-green-900"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Voltar
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (apiKey) {
+                      setApiKey("");
+                      localStorage.removeItem('openai_api_key');
+                    }
+                    setUseSimulation(!useSimulation);
+                  }}
+                  className="text-green-700 hover:text-green-900"
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Trocar
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
