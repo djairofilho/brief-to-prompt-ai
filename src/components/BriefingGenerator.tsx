@@ -3,17 +3,31 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Sparkles, Copy, Check } from "lucide-react";
+import { Sparkles, Copy, Check, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useOpenAI } from "@/hooks/useOpenAI";
+import ApiKeyInput from "./ApiKeyInput";
 
 const BriefingGenerator = () => {
   const [briefing, setBriefing] = useState("");
   const [generatedPrompt, setGeneratedPrompt] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [useSimulation, setUseSimulation] = useState(false);
   const { toast } = useToast();
 
-  const generatePrompt = async () => {
+  const { generatePrompt, isLoading, error } = useOpenAI({ apiKey });
+
+  const handleApiKeySubmit = (key: string) => {
+    setApiKey(key);
+    localStorage.setItem('openai_api_key', key);
+    toast({
+      title: "API Key configurada!",
+      description: "Agora você pode gerar prompts com OpenAI GPT-4.",
+    });
+  };
+
+  const generatePromptWithAI = async () => {
     if (!briefing.trim()) {
       toast({
         title: "Atenção",
@@ -23,11 +37,10 @@ const BriefingGenerator = () => {
       return;
     }
 
-    setIsGenerating(true);
-    
-    // Simula processamento de IA (substituir por API real)
-    setTimeout(() => {
-      const prompt = `Crie uma imagem publicitária profissional com base no seguinte briefing:
+    try {
+      if (useSimulation || !apiKey) {
+        // Simulação original
+        const prompt = `Crie uma imagem publicitária profissional com base no seguinte briefing:
 
 ${briefing}
 
@@ -47,14 +60,26 @@ Elementos visuais a considerar:
 - Identidade visual consistente
 - Apelo emocional apropriado ao público-alvo`;
 
-      setGeneratedPrompt(prompt);
-      setIsGenerating(false);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        setGeneratedPrompt(prompt);
+      } else {
+        // Usar OpenAI
+        const prompt = await generatePrompt(briefing);
+        setGeneratedPrompt(prompt);
+      }
       
       toast({
         title: "Prompt gerado com sucesso!",
-        description: "Seu prompt está pronto para ser usado.",
+        description: useSimulation || !apiKey ? "Prompt simulado criado." : "Prompt criado com OpenAI GPT-4.",
       });
-    }, 2000);
+    } catch (err) {
+      console.error('Erro ao gerar prompt:', err);
+      toast({
+        title: "Erro",
+        description: error || "Não foi possível gerar o prompt.",
+        variant: "destructive",
+      });
+    }
   };
 
   const copyToClipboard = async () => {
@@ -76,20 +101,82 @@ Elementos visuais a considerar:
     }
   };
 
+  const resetApiKey = () => {
+    setApiKey("");
+    localStorage.removeItem('openai_api_key');
+    setGeneratedPrompt("");
+    toast({
+      title: "API Key removida",
+      description: "Você pode configurar uma nova chave ou usar o modo simulação.",
+    });
+  };
+
+  // Carrega API key do localStorage na inicialização
+  useState(() => {
+    const savedApiKey = localStorage.getItem('openai_api_key');
+    if (savedApiKey) {
+      setApiKey(savedApiKey);
+    }
+  });
+
   return (
     <div className="space-y-8">
+      {/* API Configuration */}
+      {!apiKey && !useSimulation && (
+        <div className="space-y-4">
+          <ApiKeyInput onApiKeySubmit={handleApiKeySubmit} isLoading={isLoading} />
+          
+          <div className="text-center">
+            <Button
+              variant="outline"
+              onClick={() => setUseSimulation(true)}
+              className="border-gray-300 hover:bg-gray-50"
+            >
+              Usar modo simulação (sem OpenAI)
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* API Status */}
+      {(apiKey || useSimulation) && (
+        <Card className="bg-green-50 border-green-200">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="text-green-800 font-medium">
+                  {apiKey ? "OpenAI GPT-4 Conectado" : "Modo Simulação Ativo"}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetApiKey}
+                className="text-green-700 hover:text-green-900"
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Trocar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Input Section */}
-      <Card className="shadow-lg border-0 bg-white">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-2xl text-gray-800 flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-blue-500" />
-            Seu Briefing Publicitário
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div>
-            <Textarea
-              placeholder="Descreva seu anúncio publicitário aqui... 
+      {(apiKey || useSimulation) && (
+        <>
+          <Card className="shadow-lg border-0 bg-white">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-2xl text-gray-800 flex items-center gap-2">
+                <Sparkles className="h-6 w-6 text-blue-500" />
+                Seu Briefing Publicitário
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <Textarea
+                  placeholder="Descreva seu anúncio publicitário aqui... 
 
 Exemplo:
 - Produto: Smartphone premium
@@ -98,104 +185,106 @@ Exemplo:
 - Tom: Moderno e sofisticado
 - Elementos visuais: Produto em destaque, fundo minimalista
 - Cores: Azul e branco"
-              value={briefing}
-              onChange={(e) => setBriefing(e.target.value)}
-              className="min-h-[200px] text-base leading-relaxed resize-none border-gray-200 focus:border-blue-400 focus:ring-blue-400"
-            />
-          </div>
-          
-          <div className="flex justify-center">
-            <Button
-              onClick={generatePrompt}
-              disabled={isGenerating}
-              className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 transform hover:scale-105 disabled:transform-none"
-              size="lg"
-            >
-              {isGenerating ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Gerando Prompt...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Gerar Prompt
-                </>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+                  value={briefing}
+                  onChange={(e) => setBriefing(e.target.value)}
+                  className="min-h-[200px] text-base leading-relaxed resize-none border-gray-200 focus:border-blue-400 focus:ring-blue-400"
+                />
+              </div>
+              
+              <div className="flex justify-center">
+                <Button
+                  onClick={generatePromptWithAI}
+                  disabled={isLoading}
+                  className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 transform hover:scale-105 disabled:transform-none"
+                  size="lg"
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Gerando Prompt...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Gerar Prompt
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Output Section */}
-      {generatedPrompt && (
-        <Card className="shadow-lg border-0 bg-gradient-to-br from-blue-50 to-indigo-50 animate-in slide-in-from-bottom duration-500">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-2xl text-gray-800 flex items-center gap-2">
-                <Sparkles className="h-6 w-6 text-indigo-500" />
-                Prompt Gerado
-              </CardTitle>
-              <Button
-                onClick={copyToClipboard}
-                variant="outline"
-                size="sm"
-                className="border-indigo-200 hover:bg-indigo-100 transition-colors"
-              >
-                {isCopied ? (
-                  <>
-                    <Check className="h-4 w-4 mr-2 text-green-600" />
-                    Copiado
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copiar
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="bg-white rounded-lg p-6 border border-indigo-100">
-              <pre className="whitespace-pre-wrap text-gray-800 leading-relaxed font-mono text-sm">
-                {generatedPrompt}
-              </pre>
-            </div>
-          </CardContent>
-        </Card>
+          {/* Output Section */}
+          {generatedPrompt && (
+            <Card className="shadow-lg border-0 bg-gradient-to-br from-blue-50 to-indigo-50 animate-in slide-in-from-bottom duration-500">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-2xl text-gray-800 flex items-center gap-2">
+                    <Sparkles className="h-6 w-6 text-indigo-500" />
+                    Prompt Gerado {apiKey && "(OpenAI GPT-4)"}
+                  </CardTitle>
+                  <Button
+                    onClick={copyToClipboard}
+                    variant="outline"
+                    size="sm"
+                    className="border-indigo-200 hover:bg-indigo-100 transition-colors"
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="h-4 w-4 mr-2 text-green-600" />
+                        Copiado
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copiar
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-white rounded-lg p-6 border border-indigo-100">
+                  <pre className="whitespace-pre-wrap text-gray-800 leading-relaxed font-mono text-sm">
+                    {generatedPrompt}
+                  </pre>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Tips Section */}
+          <Card className="shadow-lg border-0 bg-white">
+            <CardContent className="pt-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                💡 Dicas para um briefing eficaz
+              </h3>
+              <ul className="space-y-2 text-gray-600">
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-500 mt-1">•</span>
+                  <span>Seja específico sobre o produto ou serviço</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-500 mt-1">•</span>
+                  <span>Defina claramente seu público-alvo</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-500 mt-1">•</span>
+                  <span>Mencione o tom e estilo desejado</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-500 mt-1">•</span>
+                  <span>Inclua informações sobre cores e elementos visuais</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-500 mt-1">•</span>
+                  <span>Descreva a mensagem principal que deseja transmitir</span>
+                </li>
+              </ul>
+            </CardContent>
+          </Card>
+        </>
       )}
-
-      {/* Tips Section */}
-      <Card className="shadow-lg border-0 bg-white">
-        <CardContent className="pt-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">
-            💡 Dicas para um briefing eficaz
-          </h3>
-          <ul className="space-y-2 text-gray-600">
-            <li className="flex items-start gap-2">
-              <span className="text-blue-500 mt-1">•</span>
-              <span>Seja específico sobre o produto ou serviço</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-blue-500 mt-1">•</span>
-              <span>Defina claramente seu público-alvo</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-blue-500 mt-1">•</span>
-              <span>Mencione o tom e estilo desejado</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-blue-500 mt-1">•</span>
-              <span>Inclua informações sobre cores e elementos visuais</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-blue-500 mt-1">•</span>
-              <span>Descreva a mensagem principal que deseja transmitir</span>
-            </li>
-          </ul>
-        </CardContent>
-      </Card>
     </div>
   );
 };
